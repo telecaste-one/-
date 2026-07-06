@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// A trainer (担当/トレーナー). Deletable — reservations keep a name snapshot
+// (trainerName) so history survives a trainer being removed.
+model Trainer {
+  id        String   @id @default(cuid())
+  name      String
+  initial   String
+  photoUrl  String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  slotOverrides SlotOverride[]
+  reservations  Reservation[]
+}
+
+// Per trainer / per date / per time-slot on-off override. Absence of a row
+// means the slot is open by default; the store only needs to persist
+// exceptions.
+model SlotOverride {
+  id        String  @id @default(cuid())
+  trainerId String
+  trainer   Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  date      String // YYYY-MM-DD
+  time      String // e.g. "10:00"
+  isOpen    Boolean
+
+  @@unique([trainerId, date, time])
+  @@index([trainerId, date])
+}
+
+// A customer, identified by email (no login). Plan/remaining reflect the
+// most recently booked course; visits is incremented on session completion.
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now())
+
+  planName  String?
+  planCount Int?
+  remaining Int?
+  visits    Int      @default(0)
+
+  reservations Reservation[]
+}
+
+model Reservation {
+  id           String   @id @default(cuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  customerName String
+  email        String
+  phone        String?
+  note         String?
+
+  trainerId    String?
+  trainer      Trainer? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+  trainerName  String // snapshot for history / auto-assigned label
+  autoAssigned Boolean @default(false) // customer picked "指名なし"; trainerName is a system pick
+
+  planName  String
+  planCount Int
+  planPrice String
+  single    Boolean @default(false)
+
+  date    String // YYYY-MM-DD
+  time    String
+  endTime String
+
+  status String @default("active") // active | completed | cancelled
+  source String @default("app") // app | store
+
+  createdAt DateTime @default(now())
+
+  @@index([trainerId, date, time])
+  @@index([status])
+}
+
+model AdminUser {
+  id           String @id @default(cuid())
+  username     String @unique
+  passwordHash String
+}
