@@ -14,6 +14,10 @@ export const SLOT_NOTES: Record<string, string> = {
 
 export const DAYS_JA = ["日", "月", "火", "水", "木", "金", "土"];
 
+// How many date chips are shown per "page" in the date picker (both the
+// customer app and the admin slot manager) before paging with prev/next.
+export const DATE_PAGE_SIZE = 14;
+
 export function endTimeOf(time: string): string {
   const [h, m] = time.split(":").map(Number);
   const total = h * 60 + m + SESSION_MINUTES;

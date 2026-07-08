@@ -118,6 +118,8 @@ export async function runSeed(prisma: Prisma) {
     });
     customers[def.email] = { id: c.id };
 
+    // Historical (past, already-resolved) sessions — dated before "today" so
+    // they read as completed history, not upcoming bookings.
     const already = await prisma.reservation.count({ where: { customerId: c.id, source: "seed-history" } });
     if (already === 0) {
       const today = new Date();
@@ -145,13 +147,15 @@ export async function runSeed(prisma: Prisma) {
             endTime: endTimeOf("11:30"),
             status,
             source: "seed-history",
-            note: label,
+            note: label, // keep the design's original date label for reference
           },
         });
       }
     }
   }
 
+  // --- upcoming sample reservations (occupy real slots so double-booking
+  // prevention has something to demonstrate against) ---
   const seedUpcoming = [
     { customerEmail: "sasaki@example.com", staffName: "田中 玲", dateIdx: 0, time: "11:30" },
     { customerEmail: "oikawa@example.com", staffName: "佐藤 美咲", dateIdx: 0, time: "16:00" },

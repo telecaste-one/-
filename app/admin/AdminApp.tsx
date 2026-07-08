@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ACCENT, softBg, dateChipStyle, weekdayColor } from "@/lib/theme";
+import { DATE_PAGE_SIZE } from "@/lib/constants";
 import type { TrainerDTO, ReservationDTO, CustomerListItem, CustomerDetail, AdminSlot } from "@/lib/types";
 import type { DateInfo } from "@/lib/dates";
 
-type Tab = "slots" | "list" | "cust";
+type Tab = "slots" | "list" | "cust" | "settings";
 
 export default function AdminApp() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("slots");
   const [dates, setDates] = useState<DateInfo[]>([]);
+  const [dateOffset, setDateOffset] = useState(0);
+  const [dateMaxOffset, setDateMaxOffset] = useState(0);
   const [trainers, setTrainers] = useState<TrainerDTO[]>([]);
   const [trainerIdx, setTrainerIdx] = useState(0);
   const [dateIdx, setDateIdx] = useState(0);
@@ -28,13 +31,20 @@ export default function AdminApp() {
     }
   }, []);
 
-  const loadDates = useCallback(async () => {
-    const res = await fetch("/api/public/slots", { cache: "no-store" });
+  const loadDates = useCallback(async (offset: number) => {
+    const res = await fetch(`/api/admin/dates?offset=${offset}`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       setDates(data.dates);
+      setDateOffset(data.offset);
+      setDateMaxOffset(data.maxOffset);
     }
   }, []);
+
+  function pickDatePage(offset: number) {
+    loadDates(Math.max(0, offset));
+    setDateIdx(0);
+  }
 
   const loadReservations = useCallback(async () => {
     const res = await fetch("/api/admin/reservations", { cache: "no-store" });
@@ -51,7 +61,7 @@ export default function AdminApp() {
     // after the fetch resolves, not synchronously during this effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTrainers();
-    loadDates();
+    loadDates(0);
   }, [loadTrainers, loadDates]);
 
   useEffect(() => {
@@ -85,7 +95,9 @@ export default function AdminApp() {
                   : ""
                 : tab === "list"
                   ? `予約中 ${activeCount} 件`
-                  : `登録 ${customers.length} 名`}
+                  : tab === "cust"
+                    ? `登録 ${customers.length} 名`
+                    : ""}
             </span>
             <span onClick={logout} style={{ fontSize: 11, color: "#7aa5ff", cursor: "pointer" }}>
               ログアウト
@@ -96,6 +108,7 @@ export default function AdminApp() {
           <TabButton label="予約枠" active={tab === "slots"} onClick={() => setTab("slots")} />
           <TabButton label={`予約一覧${activeCount > 0 ? `（${activeCount}）` : ""}`} active={tab === "list"} onClick={() => setTab("list")} />
           <TabButton label="顧客" active={tab === "cust"} onClick={() => setTab("cust")} />
+          <TabButton label="設定" active={tab === "settings"} onClick={() => setTab("settings")} />
         </div>
       </header>
 
@@ -107,6 +120,9 @@ export default function AdminApp() {
           dates={dates}
           dateIdx={dateIdx}
           setDateIdx={setDateIdx}
+          dateOffset={dateOffset}
+          dateMaxOffset={dateMaxOffset}
+          onPageDates={pickDatePage}
           onOpenTrainerMgr={() => setShowTrainerMgr(true)}
         />
       )}
@@ -125,6 +141,8 @@ export default function AdminApp() {
         />
       )}
 
+      {tab === "settings" && <SettingsView />}
+
       {showTrainerMgr && (
         <TrainerManagerSheet
           trainers={trainers}
@@ -132,6 +150,109 @@ export default function AdminApp() {
           onChanged={loadTrainers}
         />
       )}
+    </div>
+  );
+}
+
+function DarkPageArrow({ dir, disabled, onClick }: { dir: "prev" | "next"; disabled: boolean; onClick: () => void }) {
+  return (
+    <div
+      onClick={disabled ? undefined : onClick}
+      style={{
+        flex: "none",
+        width: 26,
+        height: 26,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: disabled ? "default" : "pointer",
+        background: disabled ? "rgba(255,255,255,.05)" : "rgba(255,255,255,.14)",
+        color: disabled ? "#4a5a80" : "#dbe6ff",
+      }}
+    >
+      {dir === "prev" ? "‹" : "›"}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------- 設定 ----
+
+function SettingsView() {
+  const [windowDays, setWindowDays] = useState<number | null>(null);
+  const [input, setInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/admin/settings", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setWindowDays(data.bookingWindowDays);
+        setInput(String(data.bookingWindowDays));
+      }
+    })();
+  }, []);
+
+  async function save() {
+    const days = Number(input);
+    if (!Number.isFinite(days) || days < 1) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingWindowDays: days }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWindowDays(data.bookingWindowDays);
+        setInput(String(data.bookingWindowDays));
+        setSaved(true);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: "16px 16px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ background: "#fff", border: "1px solid #e7ebf1", borderRadius: 16, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#16233d" }}>予約受付日数</div>
+        <div style={{ fontSize: 11.5, color: "#8a93a4", lineHeight: 1.7 }}>
+          お客様アプリで予約できるのは、今日から何日先までかを設定します。ここより先の予約枠の管理（ON/OFF）は、この設定に関わらずいつでも先まで行えます。
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="number"
+            min={1}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            style={{ width: 90, padding: "10px 12px", border: "1.5px solid #e0e5ee", borderRadius: 11, fontSize: 14, fontFamily: "inherit", color: "#1a2233", background: "#fbfcfe", outline: "none" }}
+          />
+          <span style={{ fontSize: 13, color: "#4a5468" }}>日先まで</span>
+        </div>
+        <div
+          onClick={saving ? undefined : save}
+          style={{
+            alignSelf: "flex-start",
+            padding: "11px 20px",
+            borderRadius: 11,
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: saving ? "not-allowed" : "pointer",
+            background: ACCENT,
+            color: "#fff",
+          }}
+        >
+          {saving ? "保存中…" : "保存する"}
+        </div>
+        {saved && <div style={{ fontSize: 11.5, color: "#16a06a" }}>保存しました（現在 {windowDays} 日先まで受付中）</div>}
+      </div>
     </div>
   );
 }
@@ -166,6 +287,9 @@ function SlotsView({
   dates,
   dateIdx,
   setDateIdx,
+  dateOffset,
+  dateMaxOffset,
+  onPageDates,
   onOpenTrainerMgr,
 }: {
   trainers: TrainerDTO[];
@@ -174,6 +298,9 @@ function SlotsView({
   dates: DateInfo[];
   dateIdx: number;
   setDateIdx: (i: number) => void;
+  dateOffset: number;
+  dateMaxOffset: number;
+  onPageDates: (offset: number) => void;
   onOpenTrainerMgr: () => void;
 }) {
   const trainer = trainers[trainerIdx];
@@ -243,13 +370,17 @@ function SlotsView({
           ＋ 管理
         </div>
       </div>
-      <div style={{ background: "#16233d", padding: "0 12px 13px", display: "flex", gap: 6, overflowX: "auto" }}>
-        {dates.map((d, i) => (
-          <div key={d.date} onClick={() => setDateIdx(i)} style={dateChipStyle(dateIdx === i, true, ACCENT)}>
-            <span style={{ fontSize: 10, color: weekdayColor(d.dow) }}>{d.w}</span>
-            <span style={{ fontSize: 15, fontWeight: 700, marginTop: 1 }}>{d.day}</span>
-          </div>
-        ))}
+      <div style={{ background: "#16233d", padding: "0 12px 13px", display: "flex", alignItems: "center", gap: 8 }}>
+        <DarkPageArrow dir="prev" disabled={dateOffset <= 0} onClick={() => onPageDates(dateOffset - DATE_PAGE_SIZE)} />
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1 }}>
+          {dates.map((d, i) => (
+            <div key={d.date} onClick={() => setDateIdx(i)} style={dateChipStyle(dateIdx === i, true, ACCENT)}>
+              <span style={{ fontSize: 10, color: weekdayColor(d.dow) }}>{d.w}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, marginTop: 1 }}>{d.day}</span>
+            </div>
+          ))}
+        </div>
+        <DarkPageArrow dir="next" disabled={dateOffset >= dateMaxOffset} onClick={() => onPageDates(dateOffset + DATE_PAGE_SIZE)} />
       </div>
       <div style={{ padding: "14px 16px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

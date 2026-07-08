@@ -1,4 +1,3 @@
-
 # CORE.PT 予約システム
 
 Personal-training reservation system for CORE.PT, implemented from the
@@ -57,14 +56,17 @@ app, `/admin` for the store admin app.
    and your SMTP credentials once you have them.
 5. **Deploy.** The build runs `npm run vercel-build`
    (`prisma migrate deploy && next build`, see `package.json`), which creates
-   the tables on first deploy automatically. Seeding is not automatic — after
-   the first successful deploy, run `npx prisma db seed` once from your local
-   machine with `DATABASE_URL` pointed at the production database (e.g. via
-   `vercel env pull` to get the value), so the store has its initial trainers
-   and admin login.
-6. **Use it**: customers go to `https://<your-domain>/book`, the store logs
-   into `https://<your-domain>/admin` with the admin credentials you set in
-   step 4.
+   the tables on first deploy automatically.
+6. **Seed it — just visit `https://<your-domain>/api/setup` once in a
+   browser.** It creates the admin login (from `ADMIN_USERNAME` /
+   `ADMIN_PASSWORD`) plus the sample trainers/customers, and shows the login
+   on screen. It's a no-op if an admin account already exists, so it's safe
+   to load more than once. (If you'd rather do this from a terminal instead:
+   `npx prisma db seed` with `DATABASE_URL` pointed at the production
+   database does the same thing — see `prisma/seed.ts`.)
+7. **Use it**: customers go to `https://<your-domain>/book`, the store logs
+   into `https://<your-domain>/admin` with the admin credentials from step 4
+   (or shown by `/api/setup`).
 
 ## Environment variables
 

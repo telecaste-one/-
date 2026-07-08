@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { buildAvailabilityGrid } from "@/lib/slotGrid";
 import { PLANS } from "@/lib/plans";
+import { DATE_PAGE_SIZE } from "@/lib/constants";
 import { weekdayColor, dateChipStyle, ACCENT } from "@/lib/theme";
 import type { SlotsResponse, ReservationDTO, CreateReservationResponse, MailPreview } from "@/lib/types";
 
@@ -14,6 +15,7 @@ type FormState = { name: string; email: string; phone: string; note: string };
 export default function BookingApp() {
   const [slots, setSlots] = useState<SlotsResponse | null>(null);
   const [planIdx, setPlanIdx] = useState(2);
+  const [pageOffset, setPageOffset] = useState(0); // days from today; pages the date picker through the store's booking window
   const [dateIdx, setDateIdx] = useState(0);
   const [timeIdxSel, setTimeIdxSel] = useState<number | null>(null); // explicit pick; falls back to the first bookable time when unset/stale
   const [staffIdSel, setStaffIdSel] = useState<string | null>(null); // explicit pick; falls back to 指名なし when unset/stale
@@ -29,8 +31,8 @@ export default function BookingApp() {
   const [showStoreMail, setShowStoreMail] = useState(false);
   const [showCustMail, setShowCustMail] = useState(false);
 
-  const fetchSlots = useCallback(async () => {
-    const res = await fetch("/api/public/slots", { cache: "no-store" });
+  const fetchSlots = useCallback(async (offset: number) => {
+    const res = await fetch(`/api/public/slots?offset=${offset}`, { cache: "no-store" });
     if (res.ok) setSlots(await res.json());
   }, []);
 
@@ -60,14 +62,14 @@ export default function BookingApp() {
     // these async functions after a fetch resolves (a subscription-style
     // sync with server state), not synchronously during this effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchSlots();
+    fetchSlots(pageOffset);
     checkActiveReservation();
     const iv = setInterval(() => {
-      fetchSlots();
+      fetchSlots(pageOffset);
       checkActiveReservation();
     }, POLL_MS);
     const onFocus = () => {
-      fetchSlots();
+      fetchSlots(pageOffset);
       checkActiveReservation();
     };
     window.addEventListener("focus", onFocus);
@@ -75,7 +77,12 @@ export default function BookingApp() {
       clearInterval(iv);
       window.removeEventListener("focus", onFocus);
     };
-  }, [fetchSlots, checkActiveReservation]);
+  }, [fetchSlots, checkActiveReservation, pageOffset]);
+
+  function pickPage(offset: number) {
+    setPageOffset(Math.max(0, offset));
+    setDateIdx(0);
+  }
 
   const grid = useMemo(() => (slots ? buildAvailabilityGrid(slots.overrides, slots.booked) : null), [slots]);
   const trainers = useMemo(() => slots?.trainers ?? [], [slots]);
@@ -298,7 +305,21 @@ export default function BookingApp() {
         </section>
 
         <section>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#16233d", marginBottom: 11 }}>② 日付</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#16233d" }}>② 日付</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <PageArrow
+                dir="prev"
+                disabled={(slots?.offset ?? pageOffset) <= 0}
+                onClick={() => pickPage(pageOffset - DATE_PAGE_SIZE)}
+              />
+              <PageArrow
+                dir="next"
+                disabled={!slots || slots.offset + dates.length >= slots.bookingWindowDays}
+                onClick={() => pickPage(pageOffset + DATE_PAGE_SIZE)}
+              />
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
             {dates.map((d, i) => (
               <div key={d.date} onClick={() => pickDate(i)} style={dateChipStyle(dateIdx === i, false, ACCENT)}>
@@ -591,6 +612,29 @@ const inputStyle: React.CSSProperties = {
   background: "#fbfcfe",
   outline: "none",
 };
+
+function PageArrow({ dir, disabled, onClick }: { dir: "prev" | "next"; disabled: boolean; onClick: () => void }) {
+  return (
+    <div
+      onClick={disabled ? undefined : onClick}
+      style={{
+        width: 26,
+        height: 26,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: disabled ? "default" : "pointer",
+        background: disabled ? "#f0f2f6" : "#eef3fc",
+        color: disabled ? "#c2c8d2" : ACCENT,
+      }}
+    >
+      {dir === "prev" ? "‹" : "›"}
+    </div>
+  );
+}
 
 function FormField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (

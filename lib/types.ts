@@ -11,7 +11,11 @@ export type SlotsResponse = {
   trainers: TrainerDTO[];
   overrides: SlotOverrideDTO[];
   booked: BookedSlotDTO[];
+  offset: number;
+  bookingWindowDays: number;
 };
+
+export type AdminDatesResponse = { dates: DateInfo[]; offset: number; maxOffset: number };
 
 export type ReservationDTO = {
   id: string;

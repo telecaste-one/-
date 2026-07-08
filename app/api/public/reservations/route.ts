@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUpcomingDates } from "@/lib/dates";
 import { TIME_SLOTS, endTimeOf } from "@/lib/constants";
 import { getPlan } from "@/lib/plans";
+import { getBookingWindowDays } from "@/lib/settings";
 import { pickAvailableTrainer } from "@/lib/availability";
 import { sendMail } from "@/lib/mail";
 import { buildStoreEmail, buildCustomerEmail } from "@/lib/emails";
@@ -34,7 +35,8 @@ export async function POST(request: Request) {
   if (!name) return NextResponse.json({ error: "name_required" }, { status: 400 });
   if (!email.includes("@")) return NextResponse.json({ error: "email_invalid" }, { status: 400 });
 
-  const validDates = new Set(getUpcomingDates(8).map((d) => d.date));
+  const bookingWindowDays = await getBookingWindowDays(prisma);
+  const validDates = new Set(getUpcomingDates(bookingWindowDays).map((d) => d.date));
   if (!body.date || !validDates.has(body.date)) {
     return NextResponse.json({ error: "date_invalid" }, { status: 400 });
   }

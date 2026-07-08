@@ -95,3 +95,9 @@ model AdminUser {
   username     String @unique
   passwordHash String
 }
+
+// Singleton row (id is always "app") holding store-wide settings.
+model AppSetting {
+  id                String @id @default("app")
+  bookingWindowDays Int    @default(14) // how many days ahead customers can see/book in /book
+}
